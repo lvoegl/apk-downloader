@@ -1,0 +1,4 @@
+downloader
+downloads/*.zip
+dist
+auth.json

@@ -1,0 +1,111 @@
+diff --git a/src/main/java/com/aurora/gplayapi/DownloaderCli.kt b/src/main/java/com/aurora/gplayapi/DownloaderCli.kt
+new file mode 100644
+index 0000000..41e486d
+--- /dev/null
++++ b/src/main/java/com/aurora/gplayapi/DownloaderCli.kt
+@@ -0,0 +1,105 @@
++package com.aurora.gplayapi
++
++import com.aurora.gplayapi.GooglePlayApi
++import com.aurora.gplayapi.DeviceManager
++import com.aurora.gplayapi.data.models.AuthData
++import com.aurora.gplayapi.data.providers.DeviceInfoProvider
++import com.aurora.gplayapi.data.models.File as AppFile
++import com.aurora.gplayapi.network.DefaultHttpClient
++import com.aurora.gplayapi.helpers.AppDetailsHelper
++import com.aurora.gplayapi.helpers.PurchaseHelper
++import com.google.gson.Gson
++import java.io.File
++import java.util.*
++
++class AnonAuth(
++    var email: String,
++    var auth: String,
++)
++
++class DownloaderCli {
++    companion object {
++        val model = "px_3a"
++        val authFile = "auth.json"
++        val httpClient = DefaultHttpClient
++
++        @JvmStatic fun main(args : Array<String>) {
++            try {
++                if (args.size != 2) {
++                    exitErr("package name parameter is required.")
++                } else {
++                    val packageName = args[0]
++                    val path = args[1]
++                    val authFileData = File(this.authFile)
++                    doDownload(packageName, path, authFileData.exists())
++                }
++            } catch (e: Exception) {
++                exitErr(e.toString())
++            }
++        }
++
++        @JvmStatic fun doDownload(packageName: String, path: String, authorized: Boolean = true) {
++            val auth: AnonAuth? = if (authorized) getLocalAuth() else getAuth()
++            if (auth == null) {
++                exitErr("authorization request was unsuccessful.")
++            } else {
++                val properties = DeviceManager.loadProperties("${this.model}.properties")
++                if (properties == null) {
++                    exitErr("could not load properties.")
++                } else {
++                    var locale: Locale = Locale.getDefault()
++                    val deviceInfoProvider = DeviceInfoProvider(properties, locale.toString())
++
++                    val authData = AuthData(auth.email, auth.auth, false)
++                    authData.deviceInfoProvider = deviceInfoProvider
++                    authData.locale = locale
++
++                    try {
++                        val api = GooglePlayApi(authData).via(this.httpClient)
++                        val gsfId = api.generateGsfId(deviceInfoProvider)
++                        authData.gsfId = gsfId
++
++                        val deviceConfigResponse = api.uploadDeviceConfig(deviceInfoProvider)
++                        authData.deviceConfigToken = deviceConfigResponse.uploadDeviceConfigToken
++
++                        val app = AppDetailsHelper(authData).getAppByPackageName(packageName)
++                        val files = PurchaseHelper(authData).purchase(
++                            app.packageName,
++                            app.versionCode,
++                            app.offerType
++                        )
++
++                        val dir = File("$path/$packageName")
++                        dir.mkdir()
++
++                        for (file in files) {
++                            val response = this.httpClient.get(file.url, emptyMap<String, String>(), emptyMap<String, String>())
++                            File("$path/$packageName/${file.name}").writeBytes(response.responseBytes)
++                        }
++                    } catch (e: Exception) {
++                        doDownload(packageName, path, false)
++                    }
++                }
++            }
++        }
++
++        @JvmStatic fun getAuth(): AnonAuth? {
++            val response = this.httpClient.get("https://auroraoss.com/api/auth", emptyMap<String, String>(), emptyMap<String, String>())
++            if (!response.isSuccessful) {
++                return null
++            } else {
++                File(this.authFile).writeBytes(response.responseBytes)
++                return Gson().fromJson(String(response.responseBytes), AnonAuth::class.java)
++            }
++        }
++
++        @JvmStatic fun getLocalAuth(): AnonAuth {
++            return Gson().fromJson(File(this.authFile).readText(), AnonAuth::class.java)
++        }
++
++        @JvmStatic fun exitErr(err: String) {
++            System.err.println(err);
++            System.exit(1);
++        }
++    }
++}
