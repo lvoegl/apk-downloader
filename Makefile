@@ -1,5 +1,6 @@
 DOWNLOADS_DIR := downloads
 DOWNLOADER_DIR := downloader
+PATCHES_DIR := patches
 DIST_DIR := dist
 GPLAYAPI_REPO := https://gitlab.com/AuroraOSS/gplayapi.git
 
@@ -11,7 +12,7 @@ endif
 	$(MAKE) clean
 
 	git clone $(GPLAYAPI_REPO) $(DOWNLOADER_DIR)
-	git apply --directory=$(DOWNLOADER_DIR) ./patches/*.patch
+	git apply --directory=$(DOWNLOADER_DIR) $(PATCHES_DIR)/*.patch
 
 	cd $(DOWNLOADER_DIR) && sh gradlew :assemble
 	unzip -q $$(ls $(DOWNLOADER_DIR)/build/distributions/*.zip | head -1) -d $(DIST_DIR)
